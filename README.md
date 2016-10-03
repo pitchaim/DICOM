@@ -1,5 +1,5 @@
 # DICOM
-Matlab scripts for interacting with (DICOM)[https://en.wikipedia.org/wiki/DICOM] files.
+Matlab scripts for interacting with [DICOM](https://en.wikipedia.org/wiki/DICOM) files.
 
 ##renameDicomSeries
 Takes as parameter the name of a directory containing sub-directories of DICOM files (each sub-directory representing the output of one series).
