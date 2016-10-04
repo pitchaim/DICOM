@@ -1,22 +1,24 @@
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   
 %   renameDicomSeries.m
 %   
 %       (9/30/2016) Austin Marcus
 %       ~(10/3/16) updated to loop through
 %       ~all subdirectories of base directory
+%       ~(10/4/16) updated to output only
+%       ~one log file for entire directory
 %
 %       -Takes directory of DICOM files,
 %       -renames directory based on name
 %       -of scan from file header.
-%       -Outputs log file DICOM_log.txt,
-%       -containing list of files moved
-%       -to new directory, with date 
-%       -modified & series name for each
+%
+%       -Outputs log file listing all series
+%       -with #files, scan parameters
 %
 %
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+% wrapper function - takes outer directory
 function renameDicomSeries(base_dir)
 
     if ~ischar(base_dir) or ~exist(base_dir)
@@ -28,15 +30,26 @@ function renameDicomSeries(base_dir)
     contents = dir;
     dirflags = [contents.isdir];
     subdirs = contents(dirflags);
+    
+    pathparts = strsplit(base_dir, '/');
+    base_name = pathparts{end};
+    
     subdirs(1:2) = [];
+    
+    logfile = fopen(strcat('DICOM_log_', base_name, '.txt'), 'at'); %start log file
+    fprintf(logfile, '%s\n', '---------------------------Start of logfile-------------------------------');
+    fprintf(logfile, '%s\n', '');
     
     for i = 1:length(subdirs)
         disp(['working on directory: ', subdirs(i).name]);
-        renameSeries(subdirs(i).name, i);
+        renameSeries(subdirs(i).name, i, logfile);
     end
+    fprintf(logfile, '%s\n', repmat('-',1,130));
+    fclose(logfile);
 end
 
-function renameSeries(source_dir, curnum)
+% sub-directory parser
+function renameSeries(source_dir, curnum, logfile)
     
     if ~ischar(source_dir) or ~exist(source_dir)
         error('%s is not a valid directory.', source_dir)
@@ -51,19 +64,31 @@ function renameSeries(source_dir, curnum)
         error('No DICOM files found.')
     else
         info = dicominfo(fullfile(source_dir, dicom_list(1).name));
+        if curnum == 1
+            % print log file header
+            fprintf(logfile, 'Study: %s\tDate: %s\tStart time: %s\n', info.RequestedProcedureDescription, ...
+                [num2str(info.PerformedProcedureStepStartDate(1:4)), '/', num2str(info.PerformedProcedureStepStartDate(5:6)), '/', num2str(info.PerformedProcedureStepStartDate(7:8))], ...
+                sprintf('%s:%s', info.PerformedProcedureStepStartTime(1:2), info.PerformedProcedureStepStartTime(3:4)));
+            fprintf(logfile, 'Subject age: %s\t\tGender: %s\t\tWeight(kg): %s\n', info.PatientAge, info.PatientSex, num2str(info.PatientWeight, '%.1f'));
+            fprintf(logfile, '%s\n', '');
+            fprintf(logfile, '%s\n', repmat('-',1,130));
+            fprintf(logfile, '%s \t%s%s%s%s%s%s%s%s%s%s\t%s\n', '#', 'SERIES', ...
+                repmat(' ', 1, 69), 'SEQUENCE NAME', repmat(' ', 1, 5), '#FILES', ...
+                repmat(' ', 1, 4), 'SLICE', repmat(' ', 1, 2), 'TR(ms)', repmat(' ', 1, 5 - length('TR(ms')), 'TE(ms)');
+            fprintf(logfile, '%s\n', repmat('-',1,130));
+        end
         namestr = info.SeriesDescription; %get name of first DICOM file
         cd ..
         if exist(namestr)
-            namestr = [namestr, '_', num2str(curnum)];
+            namestr = [namestr, '_', num2str(curnum)]; % sub-directory renamed
+                                                       % with number suffix
+                                                       % if not first of
+                                                       % series type
         end
         mkdir(namestr) %make new directory
         cd(namestr)
-        logfile = fopen('DICOM_log.txt', 'at'); %start log file
-        fprintf(logfile, '%s \n', 'Start of logfile. Files listed below have been successfully copied.');
-        fprintf(logfile, '%s\n', '---------------------------------------------------------------------------');
-        fprintf(logfile, '%s \t\t%s | %s | %s\n', 'NUMBER', 'NAME', 'SERIES', 'MOD DATE');
-        fprintf(logfile, '%s\n', '---------------------------------------------------------------------------');
         for i = 1:length(dicom_list)
+            %get metadata from current dicom file
             dicom_file = fullfile('..', source_dir, dicom_list(i).name);
             temp_info = dicominfo(dicom_file);
             dicom_filename = temp_info.Filename; %get file's name
@@ -71,23 +96,21 @@ function renameSeries(source_dir, curnum)
             dicom_name = [name, ext];
             dicom_series = temp_info.SeriesDescription; %get name of scan series
             dicom_mod_date = temp_info.FileModDate; %get file's modification date
-            %dicom_size = temp_info.FileSize; %get file's size
-            movefile(fullfile('..', source_dir, dicom_list(i).name));
-            if curnum < 9
-                fprintf(logfile, '%d)  \t\t%s | %s | %s\n', i, dicom_name, dicom_series, dicom_mod_date);
-            elseif curnum > 9 and curnum < 100
-                fprintf(logfile, '%d) \t\t%s | %s | %s\n', i, dicom_name, dicom_series, dicom_mod_date);
-            else
-                fprintf(logfile, '%d)\t\t%s | %s | %s\n', i, dicom_name, dicom_series, dicom_mod_date);
-            end
+            movefile(fullfile('..', source_dir, dicom_list(i).name)); %copy to new dir
             file_count = file_count + 1;
         end
-        fprintf(logfile, '%s\n', '---------------------------------------------------------------------------');
-        if file_count == length(dicom_list)
-            fprintf(logfile, '%s \n', 'Copy completed - number of files copied matches number of files found.')
+        %spacing things for readable logfile
+        if length(num2str(info.RepetitionTime)) < 4
+            spacestr = repmat(' ', 1, 5 - length(num2str(info.RepetitionTime)) + 2);
         else
-            fprintf(logfile, '%s \n', 'One or more files were not copied. Please check file index numbers above to verify.')
+            spacestr = repmat(' ', 1, 5 - length(num2str(info.RepetitionTime)) + 1);
         end
+        fprintf(logfile, '%02d\t%s%s%s%s%d%s%.1f%s%.1f%s\t%.1f\n', curnum, info.SeriesDescription, ...
+            repmat(' ', 1, 75 - length(info.SeriesDescription)), info.SequenceName, ...
+            repmat(' ', 1, 18 - length(info.SequenceName)), file_count, ...
+            repmat(' ', 1, 10 - length(num2str(file_count))), info.SliceThickness, ...
+            repmat(' ', 1, 5 - length(num2str(info.SliceThickness))), info.RepetitionTime, ...
+            spacestr, info.EchoTime);
     end
     cd ..
     rmdir(source_dir);
