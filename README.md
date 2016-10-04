@@ -3,7 +3,7 @@ Matlab scripts for interacting with [DICOM](https://en.wikipedia.org/wiki/DICOM)
 
 ##renameDicomSeries
 Takes as parameter the name of a directory containing sub-directories of DICOM files (each sub-directory representing the output of one series).
-Reads the 'SeriesDescription' field from the metadata of the first file in each sub-directory, copies contents of each sub-directory into new directory with the name of the series, and includes a log file ('DICOM_log.txt') of all files copied for each sub-directory.
+Reads the 'SeriesDescription' field from the metadata of the first file in each sub-directory, copies contents of each sub-directory into new directory with the name of the series, and outputs a master log file with information about each series found.
 
 (C) 2016 Austin Marcus
 
